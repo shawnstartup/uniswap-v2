@@ -12,7 +12,7 @@ const overrides = {
   gasLimit: 9999999
 }
 
-describe("Oracle", function () {
+describe("MultiPairOracle", function () {
 
   const getAccounts = async () => {
     const [deployer, ipVault, founder, poorMan, trader, treasury] =
