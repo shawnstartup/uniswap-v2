@@ -7,9 +7,12 @@ import "@uniswap/lib/contracts/libraries/FixedPoint.sol";
 
 import "../libraries/UniswapV2OracleLibrary.sol";
 import "../libraries/UniswapV2Library.sol";
+
+import "./Context.sol";
+import "./Ownable.sol";
 import "hardhat/console.sol";
 
-contract MultiV2PairOracle {
+contract MultiV2PairOracle is Context, Ownable {
     using FixedPoint for *;
 
     uint public constant PERIOD = 24 hours;
@@ -34,7 +37,7 @@ contract MultiV2PairOracle {
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
 
-    constructor(address _factory) public {
+    constructor(address _factory) public Ownable(msg.sender) {
         require(_factory != address(0), "invalid address");
         factory = _factory;
     }
@@ -43,7 +46,7 @@ contract MultiV2PairOracle {
         return allPairs.length;
     }
 
-    function addPair(address tokenA, address tokenB) public {
+    function addPair(address tokenA, address tokenB) public onlyOwner {
         address _pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
         PairOracle storage pairOracle = getOracle[_pair];
         require(pairOracle.pair == address(0), "pair exist");
@@ -66,6 +69,22 @@ contract MultiV2PairOracle {
         getPair[tokenA][tokenB] = _pair;
         getPair[tokenB][tokenA] = _pair; // populate mapping in the reverse direction
         allPairs.push(_pair);
+    }
+
+    function removePair(address tokenA, address tokenB) public onlyOwner {
+        address _pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+        PairOracle storage pairOracle = getOracle[_pair];
+        require(pairOracle.pair != address(0), "pair does not exist");
+
+        pairOracle.pair = address(0);
+        pairOracle.token0 = address(0);
+        pairOracle.token1 = address(0);
+        pairOracle.price0CumulativeLast = 0;
+        pairOracle.price1CumulativeLast = 0;
+        pairOracle.blockTimestampLast = 0;
+
+        getPair[tokenA][tokenB] = address(0);
+        getPair[tokenB][tokenA] = address(0);
     }
 
     function update() external {

@@ -57,13 +57,13 @@ describe("Oracle", function () {
     console.log("UniswapV2Router02 Contract address:", router.target);
 
 
-    return { deployer, factory, router };
+    return { deployer, factory, router, treasury };
   }
 
   before(async function () { });
 
   it('update', async () => {
-    const { deployer, factory, router } = await deployBaseContracts();
+    const { deployer, factory, router, treasury } = await deployBaseContracts();
 
     const tokenA = await hre.ethers.deployContract("ERC20", [parseEther("10000")]);
     await tokenA.waitForDeployment()
@@ -90,12 +90,14 @@ describe("Oracle", function () {
     await oracle.waitForDeployment();
     console.log("MultiV2PairOracle Contract address:", oracle.target);
 
+    await expect(oracle.connect(treasury).addPair(tokenA, tokenB)).to.be.reverted;
+
     await oracle.addPair(tokenA, tokenB);
     await oracle.addPair(tokenC, tokenB);
 
     pairsLen = await oracle.allPairsLength();
     console.log("pairsLen: %d", pairsLen);
-    expect(pairsLen, 2);
+    expect(pairsLen).to.equal(2);
 
     const reserve0 = (await pair.getReserves())[0];
     const reserve1 = (await pair.getReserves())[1];
@@ -106,16 +108,16 @@ describe("Oracle", function () {
     await oracle.update(overrides)
 
     oraclePairAddress = await oracle.getPair(tokenA.target, tokenB.target);
-    expect(oraclePairAddress, pairAddress);
+    expect(oraclePairAddress).to.equal(pairAddress);
 
     oraclePairAddress2 = await oracle.getPair(tokenC.target, tokenB.target);
-    expect(oraclePairAddress2, pairAddress2);
+    expect(oraclePairAddress2).to.equal(pairAddress2);
 
     pairOracle = await oracle.getOracle(pairAddress);
-    expect(pairOracle.pair, pairAddress);
+    expect(pairOracle.pair).to.equal(pairAddress);
 
     pairOracle2 = await oracle.getOracle(pairAddress2);
-    expect(pairOracle2.pair, pairAddress2);
+    expect(pairOracle2.pair).to.equal(pairAddress2);
 
     expect(await oracle.consult([tokenA.target, tokenB.target], token0Amount)).to.eq(token1Amount);
     expect(await oracle.consult([tokenB.target, tokenA.target], token1Amount)).to.eq(token0Amount);
@@ -125,6 +127,15 @@ describe("Oracle", function () {
 
     expect(await oracle.consult([tokenA.target, tokenB.target, tokenC.target], BigInt(1e18))).to.eq(BigInt(0.25e18));
     expect(await oracle.consult([tokenC.target, tokenB.target, tokenA.target], BigInt(0.25e18))).to.eq(BigInt(1e18));
+
+
+    await expect(oracle.consult([tokenA.target], token0Amount)).to.be.revertedWith("INVALID_PATH_LEN");
+    await expect(oracle.connect(treasury).removePair(tokenA, tokenB)).to.be.revertedWith("OwnableUnauthorizedAccount");
+
+    await oracle.removePair(tokenB, tokenC);
+    oraclePairAddress = await oracle.getPair(tokenC.target, tokenB.target);
+    expect(oraclePairAddress).to.equal("0x0000000000000000000000000000000000000000");
+    await expect(oracle.consult([tokenA.target, tokenB.target, tokenC.target], token0Amount)).to.be.revertedWith("pair does not exist");
 
   })
 });
