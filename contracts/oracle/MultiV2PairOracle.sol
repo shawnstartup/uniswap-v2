@@ -10,7 +10,8 @@ import "../libraries/UniswapV2Library.sol";
 
 import "./Context.sol";
 import "./Ownable.sol";
-import "hardhat/console.sol";
+
+// import "hardhat/console.sol";
 
 contract MultiV2PairOracle is Context, Ownable {
     using FixedPoint for *;
@@ -37,6 +38,28 @@ contract MultiV2PairOracle is Context, Ownable {
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
 
+    event PairAdded(
+        address indexed token0,
+        address indexed token1,
+        address pair,
+        uint
+    );
+
+    event PairRemoved(
+        address indexed token0,
+        address indexed token1,
+        address pair
+    );
+
+    event Updated(
+        address indexed pair,
+        uint price0Cumulative,
+        uint price1Cumulative,
+        uint price0Average,
+        uint price1Average,
+        uint32 blockTimestamp
+    );
+
     constructor(address _factory) public Ownable(msg.sender) {
         require(_factory != address(0), "invalid address");
         factory = _factory;
@@ -47,7 +70,7 @@ contract MultiV2PairOracle is Context, Ownable {
     }
 
     function addPair(address tokenA, address tokenB) public onlyOwner {
-        address _pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+        address _pair = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
         PairOracle storage pairOracle = getOracle[_pair];
         require(pairOracle.pair == address(0), "pair exist");
 
@@ -69,12 +92,21 @@ contract MultiV2PairOracle is Context, Ownable {
         getPair[tokenA][tokenB] = _pair;
         getPair[tokenB][tokenA] = _pair; // populate mapping in the reverse direction
         allPairs.push(_pair);
+
+        emit PairAdded(
+            pairOracle.token0,
+            pairOracle.token1,
+            _pair,
+            allPairs.length
+        );
     }
 
     function removePair(address tokenA, address tokenB) public onlyOwner {
-        address _pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+        address _pair = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
         PairOracle storage pairOracle = getOracle[_pair];
         require(pairOracle.pair != address(0), "pair does not exist");
+
+        emit PairRemoved(pairOracle.token0, pairOracle.token1, _pair);
 
         pairOracle.pair = address(0);
         pairOracle.token0 = address(0);
@@ -102,7 +134,7 @@ contract MultiV2PairOracle is Context, Ownable {
             ) = UniswapV2OracleLibrary.currentCumulativePrices(pairOracle.pair);
             uint32 timeElapsed = blockTimestamp - pairOracle.blockTimestampLast; // overflow is desired
 
-            console.log("timeElapsed=%d, PERIOD=%d", timeElapsed, PERIOD);
+            // console.log("timeElapsed=%d, PERIOD=%d", timeElapsed, PERIOD);
             // ensure that at least one full period has passed since the last update
             if (timeElapsed < PERIOD) {
                 continue;
@@ -126,7 +158,15 @@ contract MultiV2PairOracle is Context, Ownable {
             pairOracle.price0CumulativeLast = price0Cumulative;
             pairOracle.price1CumulativeLast = price1Cumulative;
             pairOracle.blockTimestampLast = blockTimestamp;
-            console.log("updated pair: ", pairOracle.pair);
+            // console.log("updated pair: ", pairOracle.pair);
+            emit Updated(
+                _pair,
+                price0Cumulative,
+                price1Cumulative,
+                pairOracle.price0Average.mul(1).decode144(),
+                pairOracle.price1Average.mul(1).decode144(),
+                blockTimestamp
+            );
         }
     }
 
@@ -159,20 +199,19 @@ contract MultiV2PairOracle is Context, Ownable {
 
         uint _amountIn = amountIn;
         for (uint i = 0; i < tokenPathLen - 1; i++) {
-            address _pair = UniswapV2Library.pairFor(
-                factory,
+            address _pair = IUniswapV2Factory(factory).getPair(
                 tokenPath[i],
                 tokenPath[i + 1]
             );
             PairOracle storage pairOracle = getOracle[_pair];
             require(pairOracle.pair != address(0), "pair does not exist");
             amountOut = _consult(_pair, tokenPath[i], _amountIn);
-            console.log(
-                "pair:%s, _amountIn=%d, amountOut=d",
-                _pair,
-                _amountIn,
-                amountOut
-            );
+            // console.log(
+            //     "pair:%s, _amountIn=%d, amountOut=d",
+            //     _pair,
+            //     _amountIn,
+            //     amountOut
+            // );
             _amountIn = amountOut;
         }
     }

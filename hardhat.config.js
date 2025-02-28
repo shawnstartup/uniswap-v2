@@ -28,6 +28,14 @@ module.exports = {
     },
     customChains: [
       {
+        network: "arbitrum",
+        chainId: 42161,
+        urls: {
+          apiURL: "https://api.arbiscan.io/api",
+          browserURL: "https://arbiscan.io/",
+        },
+      },
+      {
         network: "arbitrum_sepolia",
         chainId: 421614,
         urls: {
@@ -47,6 +55,10 @@ module.exports = {
   },
   networks: {
     hardhat: {},
+    arbitrum: {
+      url: "https://arb1.arbitrum.io/rpc",
+      accounts: [process.env.PRIVATE_KEY],
+    },
     arbitrum_sepolia: {
       url: "https://sepolia-rollup.arbitrum.io/rpc",
       accounts: [process.env.PRIVATE_KEY],
